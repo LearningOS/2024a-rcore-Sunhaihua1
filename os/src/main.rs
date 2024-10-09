@@ -49,7 +49,7 @@ pub fn rust_main() -> ! {
         fn sbss(); // start addr of BSS segment
         fn ebss(); // end addr of BSS segment
         fn boot_stack_lower_bound(); // stack lower bound
-        fn boot_stack_top(); // stack top
+        fn boot_stack_top(); // stack top/
     }
     clear_bss();
     logging::init();
