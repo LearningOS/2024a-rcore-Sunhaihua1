@@ -57,6 +57,7 @@ lazy_static! {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
             syscall_times: [0; MAX_SYSCALL_NUM],
+            first_run_time: 0,
         }; MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
@@ -83,6 +84,7 @@ impl TaskManager {
         let mut inner = self.inner.exclusive_access();
         let task0 = &mut inner.tasks[0];
         task0.task_status = TaskStatus::Running;
+        task0.first_run_time = crate::timer::get_time_ms();
         let next_task_cx_ptr = &task0.task_cx as *const TaskContext;
         drop(inner);
         let mut _unused = TaskContext::zero_init();
@@ -124,7 +126,11 @@ impl TaskManager {
         if let Some(next) = self.find_next_task() {
             let mut inner = self.inner.exclusive_access();
             let current = inner.current_task;
-            inner.tasks[next].task_status = TaskStatus::Running;
+            let task_next = &mut inner.tasks[next];
+            if task_next.task_status == TaskStatus::UnInit {
+                task_next.first_run_time = crate::timer::get_time_ms();
+            }
+            task_next.task_status = TaskStatus::Running;
             inner.current_task = next;
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
@@ -198,4 +204,9 @@ pub fn get_current_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
 /// add syscall times of current task
 pub fn add_syscall_times(syscall_id: usize) {
     TASK_MANAGER.add_syscall_times(syscall_id);
+}
+/// get current task first run time
+pub fn get_current_task_first_run_time() -> usize {
+    let inner = TASK_MANAGER.inner.exclusive_access();
+    inner.tasks[inner.current_task].first_run_time
 }
