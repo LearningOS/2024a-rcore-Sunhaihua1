@@ -4,11 +4,12 @@ use alloc::sync::Arc;
 use crate::{
     config::MAX_SYSCALL_NUM,
     loader::get_app_data_by_name,
-    mm::{translated_refmut, translated_str},
+    mm::{translated_byte_buffer, translated_refmut, translated_str},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
         mmap_to_current_task, munmap_to_current_task, suspend_current_and_run_next, TaskStatus,
     },
+    timer::get_time_us,
 };
 
 #[repr(C)]
@@ -121,12 +122,30 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
 /// YOUR JOB: get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
+#[allow(unused_variables)]
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
+    let us = get_time_us();
+    let dst = translated_byte_buffer(
+        current_user_token(),
+        _ts as *const u8,
+        core::mem::size_of::<TimeVal>(),
     );
-    -1
+    let time_val = TimeVal {
+        sec: us / 1_000_000,
+        usec: us % 1_000_000,
+    };
+    let mut len = 0;
+    let time_val_src = &time_val as *const TimeVal;
+    for (idx, dst) in dst.into_iter().enumerate() {
+        unsafe {
+            dst.copy_from_slice(core::slice::from_raw_parts(
+                time_val_src.wrapping_byte_add(len) as *const u8,
+                dst.len(),
+            ));
+        }
+        len += dst.len();
+    }
+    0
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
