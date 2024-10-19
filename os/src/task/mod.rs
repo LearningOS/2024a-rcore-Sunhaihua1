@@ -21,7 +21,7 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::loader::get_app_data_by_name;
+use crate::{loader::get_app_data_by_name, timer::get_time_ms};
 use alloc::sync::Arc;
 use lazy_static::*;
 pub use manager::{fetch_task, TaskManager};
@@ -100,7 +100,8 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     let mut _unused = TaskContext::zero_init();
     schedule(&mut _unused as *mut _);
 }
-
+/// max syscall count
+pub const MAX_SYSCALL_NUM: usize = 500;
 lazy_static! {
     /// Creation of initial process
     ///
@@ -130,4 +131,33 @@ pub fn mmap_to_current_task(_start: usize, _len: usize, _port: usize) -> isize {
         .inner_exclusive_access()
         .memory_set
         .mmap(_start, _len, _port)
+}
+/// get current task status;
+pub fn get_current_status() -> TaskStatus {
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .get_status()
+}
+/// get syscall times of current task
+pub fn get_current_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .get_syscall_times()
+}
+/// add syscall times of current task
+pub fn add_syscall_times(syscall_id: usize) {
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .add_syscall_times(syscall_id)
+}
+/// get current task first run time
+pub fn get_current_run_time() -> usize {
+    get_time_ms()
+        - current_task()
+            .unwrap()
+            .inner_exclusive_access()
+            .get_first_run_time()
 }
