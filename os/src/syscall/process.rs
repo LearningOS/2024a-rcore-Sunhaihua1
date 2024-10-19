@@ -8,7 +8,8 @@ use crate::{
     mm::{translated_byte_buffer, translated_refmut, translated_str},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
-        mmap_to_current_task, munmap_to_current_task, suspend_current_and_run_next, TaskStatus,
+        get_current_run_time, get_current_syscall_times, mmap_to_current_task,
+        munmap_to_current_task, suspend_current_and_run_next, TaskStatus,
     },
     timer::get_time_us,
 };
@@ -152,11 +153,29 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TaskInfo`] is splitted by two pages ?
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_task_info NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
+    trace!("kernel: sys_task_info NOT IMPLEMENTED YET!");
+    let dst = translated_byte_buffer(
+        current_user_token(),
+        _ti as *const u8,
+        core::mem::size_of::<TaskInfo>(),
     );
-    -1
+    let src = TaskInfo {
+        status: TaskStatus::Running,
+        syscall_times: get_current_syscall_times(),
+        time: get_current_run_time(),
+    };
+    let mut len = 0;
+    let src_ptr = &src as *const TaskInfo;
+    for dst in dst.into_iter() {
+        unsafe {
+            dst.copy_from_slice(core::slice::from_raw_parts(
+                src_ptr.wrapping_byte_add(len) as *const u8,
+                dst.len(),
+            ));
+        }
+        len += dst.len();
+    }
+    0
 }
 
 // YOUR JOB: Implement mmap.
