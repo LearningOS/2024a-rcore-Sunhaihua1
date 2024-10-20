@@ -37,6 +37,7 @@ lazy_static! {
 pub struct MemorySet {
     page_table: PageTable,
     areas: Vec<MapArea>,
+    map_data: BTreeMap<VirtPageNum, FrameTracker>,
 }
 
 impl MemorySet {
@@ -45,6 +46,7 @@ impl MemorySet {
         Self {
             page_table: PageTable::new(),
             areas: Vec::new(),
+            map_data: BTreeMap::new(),
         }
     }
     /// Get the page table token
@@ -77,6 +79,53 @@ impl MemorySet {
             PhysAddr::from(strampoline as usize).into(),
             PTEFlags::R | PTEFlags::X,
         );
+    }
+    /// mmap of a memory set
+    pub fn mmap(&mut self, _start: usize, _len: usize, _port: usize) -> isize {
+        let va_start: VirtAddr = VirtAddr::from(_start);
+        let mut pte_flags = PTEFlags::from_bits(0).unwrap();
+        if va_start.page_offset() != 0 {
+            error!("sys_mmap: start address is not page-aligned");
+            return -1;
+        }
+        if _port > 7 {
+            error!("sys_mmap: port is not 8-byte aligned");
+            return -1;
+        } else if _port & 0x7 == 0 {
+            error!("no sense to mmap a port000");
+            return -1;
+        }
+        if _port & 0x1 != 0 {
+            pte_flags |= PTEFlags::R;
+        }
+        if _port & 0x2 != 0 {
+            pte_flags |= PTEFlags::W;
+        }
+        if _port & 0x4 != 0 {
+            pte_flags |= PTEFlags::X;
+        }
+        pte_flags |= PTEFlags::U;
+        pte_flags |= PTEFlags::V;
+        let va_end: VirtAddr = VirtAddr::from(_start + _len);
+        let mut va_start: VirtPageNum = va_start.into();
+        let va_end: VirtPageNum = va_end.ceil();
+        while va_start < va_end {
+            if let Some(pte) = self.page_table.translate(va_start) {
+                if pte.is_valid() {
+                    error!("sys_mmap: address overlap");
+                    return -1;
+                }
+            }
+            if let Some(frame) = frame_alloc() {
+                self.page_table.map(va_start, frame.ppn, pte_flags);
+                self.map_data.insert(va_start, frame);
+            } else {
+                error!("sys_mmap: no frame available");
+                return -1;
+            }
+            va_start.step()
+        }
+        0
     }
     /// Without kernel stacks.
     pub fn new_kernel() -> Self {

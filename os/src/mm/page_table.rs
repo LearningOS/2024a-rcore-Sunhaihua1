@@ -4,18 +4,20 @@ use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPag
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
-
 bitflags! {
     /// page table entry flags
+
     pub struct PTEFlags: u8 {
+        /// Valid flag. This indicates if the page is valid.
         const V = 1 << 0;
+        /// Read-only flag. This indicates if the page is read-only.
         const R = 1 << 1;
+        /// Writable flag. This indicates if the page is writable.
         const W = 1 << 2;
+        /// Executable flag. This indicates if the page is executable.
         const X = 1 << 3;
+        /// User-accessible flag. This indicates if the page is accessible in user mode.
         const U = 1 << 4;
-        const G = 1 << 5;
-        const A = 1 << 6;
-        const D = 1 << 7;
     }
 }
 
