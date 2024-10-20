@@ -141,8 +141,16 @@ impl TaskManager {
         if let Some(next) = self.find_next_task() {
             let mut inner = self.inner.exclusive_access();
             let current = inner.current_task;
-            inner.tasks[next].task_status = TaskStatus::Running;
             inner.current_task = next;
+            let task_next = &mut inner.tasks[next];
+            // task::status is not UnInit in this stage, it is Ready, so we cannot set first_run_time by task::status
+            if task_next.first_run_time == 0 {
+                task_next.first_run_time = crate::timer::get_time_ms();
+            }
+            // if task_next.task_status == TaskStatus::UnInit {
+            //     task_next.first_run_time = crate::timer::get_time_ms();
+            // }
+            task_next.task_status = TaskStatus::Running;
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
             drop(inner);

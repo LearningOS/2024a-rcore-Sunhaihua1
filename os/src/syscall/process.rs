@@ -59,7 +59,7 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     };
     let mut len = 0;
     let time_val_src = &time_val as *const TimeVal;
-    for (idx, dst) in dst.into_iter().enumerate() {
+    for dst in dst.into_iter() {
         unsafe {
             dst.copy_from_slice(core::slice::from_raw_parts(
                 time_val_src.wrapping_byte_add(len) as *const u8,
@@ -89,7 +89,6 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     let mut len = 0;
     let src_ptr = &src as *const TaskInfo;
     for dst in dst.into_iter() {
-        len += dst.len();
         unsafe {
             dst.copy_from_slice(core::slice::from_raw_parts(
                 src_ptr.wrapping_byte_add(len) as *const u8,
