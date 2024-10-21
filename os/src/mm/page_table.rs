@@ -6,18 +6,23 @@ use alloc::vec::Vec;
 use bitflags::*;
 bitflags! {
     /// page table entry flags
-
     pub struct PTEFlags: u8 {
-        /// Valid flag. This indicates if the page is valid.
+        /// Valid
         const V = 1 << 0;
-        /// Read-only flag. This indicates if the page is read-only.
+        /// Readable
         const R = 1 << 1;
-        /// Writable flag. This indicates if the page is writable.
+        /// Writable
         const W = 1 << 2;
-        /// Executable flag. This indicates if the page is executable.
+        /// Executable
         const X = 1 << 3;
-        /// User-accessible flag. This indicates if the page is accessible in user mode.
+        /// User
         const U = 1 << 4;
+        /// Global
+        const G = 1 << 5;
+        /// Accessed
+        const A = 1 << 6;
+        /// Dirty
+        const D = 1 << 7;
     }
 }
 
