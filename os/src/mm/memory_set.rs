@@ -127,6 +127,33 @@ impl MemorySet {
         }
         0
     }
+    /// unmap of a memory set
+    pub fn munmap(&mut self, start: usize, len: usize) -> isize {
+        let va_start: VirtAddr = VirtAddr::from(start);
+        let va_end: VirtAddr = VirtAddr::from(start + len);
+        if va_start.page_offset() != 0 {
+            error!("sys_mmap: start address is not page-aligned");
+            return -1;
+        }
+        let mut va_start_err: VirtPageNum = va_start.into();
+        let mut va_start: VirtPageNum = va_start.into();
+        let va_end: VirtPageNum = va_end.ceil();
+        while va_start_err < va_end {
+            if let Some(pte) = self.page_table.translate(va_start_err) {
+                if !pte.is_valid() {
+                    error!("sys_munmap: non-mapped address");
+                    return -1;
+                }
+            }
+            va_start_err.step()
+        }
+        while va_start < va_end {
+            self.map_data.remove(&va_start);
+            self.page_table.unmap(va_start);
+            va_start.step()
+        }
+        0
+    }
     /// Without kernel stacks.
     pub fn new_kernel() -> Self {
         let mut memory_set = Self::new_bare();

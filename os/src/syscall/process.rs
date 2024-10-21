@@ -5,7 +5,7 @@ use crate::{
     task::{
         change_program_brk, current_user_token, exit_current_and_run_next, get_current_status,
         get_current_syscall_times, get_current_task_first_run_time, mmap_to_current_task,
-        suspend_current_and_run_next, TaskStatus,
+        munmap_to_current_task, suspend_current_and_run_next, TaskStatus,
     },
     timer::{get_time_ms, get_time_us},
 };
@@ -105,9 +105,8 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
 }
 
 // YOUR JOB: Implement munmap.
-pub fn sys_munmap(_start: usize, _len: usize) -> isize {
-    trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
-    -1
+pub fn sys_munmap(start: usize, len: usize) -> isize {
+    munmap_to_current_task(start, len)
 }
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {

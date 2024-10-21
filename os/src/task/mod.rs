@@ -250,3 +250,9 @@ pub fn mmap_to_current_task(_start: usize, _len: usize, _port: usize) -> isize {
     let current = inner.current_task;
     inner.tasks[current].memory_set.mmap(_start, _len, _port)
 }
+/// munmap implementation
+pub fn munmap_to_current_task(_start: usize, _len: usize) -> isize {
+    let mut inner = TASK_MANAGER.inner.exclusive_access();
+    let current = inner.current_task;
+    inner.tasks[current].memory_set.munmap(_start, _len)
+}
