@@ -1,6 +1,7 @@
 //! Types related to task management & Functions for completely changing TCB
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 use super::{TaskContext, MAX_SYSCALL_NUM};
+use crate::config::BIG_STRIDE;
 use crate::config::TRAP_CONTEXT_BASE;
 use crate::fs::{File, Stdin, Stdout};
 use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
@@ -35,6 +36,28 @@ impl TaskControlBlock {
     pub fn get_user_token(&self) -> usize {
         let inner = self.inner_exclusive_access();
         inner.memory_set.token()
+    }
+}
+impl PartialOrd for TaskControlBlock {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        return other
+            .inner_exclusive_access()
+            .stride
+            .partial_cmp(&self.inner_exclusive_access().stride);
+    }
+}
+impl Ord for TaskControlBlock {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        return other
+            .inner_exclusive_access()
+            .stride
+            .cmp(&self.inner_exclusive_access().stride);
+    }
+}
+impl Eq for TaskControlBlock {}
+impl PartialEq for TaskControlBlock {
+    fn eq(&self, other: &Self) -> bool {
+        return self.inner_exclusive_access().stride == other.inner_exclusive_access().stride;
     }
 }
 
@@ -75,6 +98,10 @@ pub struct TaskControlBlockInner {
     pub syscall_times: [u32; MAX_SYSCALL_NUM],
     /// first run time
     pub first_run_time: usize,
+    /// stride
+    pub stride: usize,
+    /// priority
+    pub priority: usize,
 }
 
 impl TaskControlBlockInner {
@@ -106,6 +133,12 @@ impl TaskControlBlockInner {
     }
     pub fn add_syscall_times(&mut self, syscall_id: usize) {
         self.syscall_times[syscall_id] += 1;
+    }
+    pub fn set_priority(&mut self, priority: usize) {
+        self.priority = priority;
+    }
+    pub fn set_stride(&mut self) {
+        self.stride += BIG_STRIDE / self.priority;
     }
 }
 
@@ -150,6 +183,8 @@ impl TaskControlBlock {
                     program_brk: user_sp,
                     syscall_times: [0; MAX_SYSCALL_NUM],
                     first_run_time: 0,
+                    stride: 0,
+                    priority: 16,
                 })
             },
         };
@@ -189,6 +224,8 @@ impl TaskControlBlock {
             Some(Arc::new(Stdout)),
         ];
         inner.first_run_time = 0;
+        inner.stride = 0;
+        inner.priority = 16;
 
         // initialize trap_cx
         let trap_cx = TrapContext::app_init_context(
@@ -243,6 +280,8 @@ impl TaskControlBlock {
                     program_brk: parent_inner.program_brk,
                     syscall_times: parent_inner.syscall_times,
                     first_run_time: parent_inner.first_run_time,
+                    stride: parent_inner.stride,
+                    priority: parent_inner.priority,
                 })
             },
         });
@@ -301,6 +340,8 @@ impl TaskControlBlock {
                         // 2 -> stderr
                         Some(Arc::new(Stdout)),
                     ],
+                    priority: 16,
+                    stride: 0,
                 })
             },
         });
@@ -316,6 +357,7 @@ impl TaskControlBlock {
         parent_inner.children.push(task_control_block.clone());
         task_control_block
     }
+
     /// change the location of the program break. return None if failed.
     pub fn change_program_brk(&self, size: i32) -> Option<usize> {
         let mut inner = self.inner_exclusive_access();
