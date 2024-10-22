@@ -173,8 +173,8 @@ impl TaskControlBlock {
                     parent: Some(Arc::downgrade(self)),
                     children: Vec::new(),
                     exit_code: 0,
-                    heap_bottom: parent_inner.heap_bottom,
-                    program_brk: parent_inner.program_brk,
+                    heap_bottom: user_sp,
+                    program_brk: user_sp,
                     syscall_times: [0; MAX_SYSCALL_NUM],
                     first_run_time: 0,
                 })
