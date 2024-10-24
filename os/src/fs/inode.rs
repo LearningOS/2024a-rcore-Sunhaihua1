@@ -52,6 +52,10 @@ impl OSInode {
         }
         v
     }
+    /// get_inode of OSInode
+    pub fn get_inode(&self) -> Arc<Inode> {
+        self.inner.exclusive_access().inode.clone()
+    }
 }
 
 lazy_static! {
@@ -68,6 +72,19 @@ pub fn list_apps() {
         println!("{}", app);
     }
     println!("**************/");
+}
+/// link a existing file to a new file
+pub fn linkat(old_name: &str, new_name: &str) -> isize {
+    ROOT_INODE.linkat(old_name, new_name)
+}
+
+///  Get the number of hard links to a inode
+pub fn nlinks(inode_id: u32) -> u32 {
+    ROOT_INODE.nlinks(inode_id)
+}
+/// unlink a file
+pub fn unlinkat(name: &str) -> isize {
+    ROOT_INODE.unlinkat(name)
 }
 
 bitflags! {
@@ -154,5 +171,8 @@ impl File for OSInode {
             total_write_size += write_size;
         }
         total_write_size
+    }
+    fn as_any(&self) -> &dyn core::any::Any {
+        self
     }
 }

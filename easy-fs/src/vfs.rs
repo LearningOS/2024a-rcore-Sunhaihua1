@@ -13,7 +13,32 @@ pub struct Inode {
     fs: Arc<Mutex<EasyFileSystem>>,
     block_device: Arc<dyn BlockDevice>,
 }
+use bitflags::*;
 
+#[repr(C)]
+#[derive(Debug)]
+pub struct Stat {
+    /// 文件所在磁盘驱动器号，该实验中写死为 0 即可
+    pub dev: u64,
+    /// inode 文件所在 inode 编号
+    pub ino: u64,
+    /// 文件类型
+    pub mode: StatMode,
+    /// 硬链接数量，初始为1
+    pub nlink: u32,
+    /// 无需考虑，为了兼容性设计
+    pad: [u64; 7],
+}
+
+bitflags! {
+    pub struct StatMode: u32 {
+        const NULL  = 0;
+        /// directory
+        const DIR   = 0o040000;
+        /// ordinary regular file
+        const FILE  = 0o100000;
+    }
+}
 impl Inode {
     /// Create a vfs inode
     pub fn new(
@@ -182,5 +207,110 @@ impl Inode {
             }
         });
         block_cache_sync_all();
+    }
+    /// unlinkat
+    pub fn unlinkat(&self, name: &str) -> isize {
+        let inode_id = self.read_disk_inode(|disk_inode| self.find_inode_id(name, disk_inode));
+        if inode_id.is_none() {
+            return -1;
+        }
+        let inode_id = inode_id.unwrap();
+        let nlinks = self.nlinks(inode_id);
+        self.modify_disk_inode(|root_inode| {
+            let file_count = (root_inode.size as usize) / DIRENT_SZ;
+            let mut dirent = DirEntry::empty();
+            for i in 0..file_count {
+                assert_eq!(
+                    root_inode.read_at(i * DIRENT_SZ, dirent.as_bytes_mut(), &self.block_device,),
+                    DIRENT_SZ,
+                );
+                if dirent.name() == name {
+                    // remove dirent
+                    let last_dirent = DirEntry::empty();
+                    root_inode.write_at(i * DIRENT_SZ, last_dirent.as_bytes(), &self.block_device);
+                    break;
+                }
+            }
+        });
+        if nlinks == 1 {
+            // dealloc inode
+            self.fs.lock().dealloc_inode(inode_id);
+        }
+        block_cache_sync_all();
+        0
+    }
+    /// linkat
+    pub fn linkat(&self, old_name: &str, new_name: &str) -> isize {
+        // find old
+        let mut fs = self.fs.lock();
+        let inode = self.read_disk_inode(|disk_inode| {
+            self.find_inode_id(old_name, disk_inode).map(|inode_id| {
+                let (block_id, block_offset) = fs.get_disk_inode_pos(inode_id);
+                Arc::new(Self::new(
+                    block_id,
+                    block_offset,
+                    self.fs.clone(),
+                    self.block_device.clone(),
+                ))
+            })
+        });
+        if inode.is_none() {
+            return -1;
+        }
+        let inode_id = self.read_disk_inode(|disk_inode| self.find_inode_id(old_name, disk_inode));
+        // create new
+        let op = |root_inode: &DiskInode| {
+            // assert it is a directory
+            assert!(root_inode.is_dir());
+            // has the file been created?
+            self.find_inode_id(new_name, root_inode)
+        };
+        if self.read_disk_inode(op).is_some() {
+            return -1;
+        }
+        self.modify_disk_inode(|root_inode| {
+            // append file in the dirent
+            let file_count = (root_inode.size as usize) / DIRENT_SZ;
+            let new_size = (file_count + 1) * DIRENT_SZ;
+            // increase size
+            self.increase_size(new_size as u32, root_inode, &mut fs);
+            // write dirent
+            let dirent = DirEntry::new(new_name, inode_id.unwrap());
+            root_inode.write_at(
+                file_count * DIRENT_SZ,
+                dirent.as_bytes(),
+                &self.block_device,
+            );
+        });
+        0
+    }
+    /// get inode id
+    pub fn get_inode_id(&self) -> u64 {
+        let block_id = self.block_id;
+        let block_offset = self.block_offset;
+        let fs = self.fs.lock();
+        fs.get_inode_id(block_id as u64, block_offset)
+    }
+    /// get nlinks
+    pub fn nlinks(&self, inode_id: u32) -> u32 {
+        self.read_disk_inode(|disk_inode| {
+            let file_count = (disk_inode.size as usize) / DIRENT_SZ;
+            let mut nlinks = 0;
+            for i in 0..file_count {
+                let mut dirent = DirEntry::empty();
+                assert_eq!(
+                    disk_inode.read_at(i * DIRENT_SZ, dirent.as_bytes_mut(), &self.block_device,),
+                    DIRENT_SZ,
+                );
+                if dirent.inode_id() == inode_id {
+                    nlinks += 1;
+                }
+            }
+            nlinks
+        })
+    }
+    /// impl fstat
+    pub fn fstat(&self) -> isize {
+        -1
     }
 }
