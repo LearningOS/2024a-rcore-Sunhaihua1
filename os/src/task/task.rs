@@ -4,6 +4,7 @@ use super::id::TaskUserRes;
 use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext};
 use crate::trap::TrapContext;
 use crate::{mm::PhysPageNum, sync::UPSafeCell};
+use alloc::collections::BTreeMap;
 use alloc::sync::{Arc, Weak};
 use core::cell::RefMut;
 
@@ -41,6 +42,10 @@ pub struct TaskControlBlockInner {
     pub task_status: TaskStatus,
     /// It is set when active exit or execution error occurs
     pub exit_code: Option<i32>,
+    pub mutex_need: BTreeMap<usize, usize>,
+    pub mutex_allocation: BTreeMap<usize, usize>,
+    pub sem_need: BTreeMap<usize, usize>,
+    pub sem_allocation: BTreeMap<usize, usize>,
 }
 
 impl TaskControlBlockInner {
@@ -51,6 +56,43 @@ impl TaskControlBlockInner {
     #[allow(unused)]
     fn get_status(&self) -> TaskStatus {
         self.task_status
+    }
+    pub fn set_mutex_allocated(&mut self, mutex_id: usize, value: usize) {
+        self.mutex_allocation.insert(mutex_id, value);
+    }
+    pub fn set_mutex_need(&mut self, mutex_id: usize, value: usize) {
+        self.mutex_need.insert(mutex_id, value);
+    }
+    pub fn get_mutex_allocated(&self, mutex_id: usize) -> usize {
+        if !self.mutex_allocation.contains_key(&mutex_id) {
+            return 0;
+        }
+        *self.mutex_allocation.get(&mutex_id).unwrap()
+    }
+    pub fn get_mutex_need(&self, sem_id: usize) -> usize {
+        if !self.mutex_need.contains_key(&sem_id) {
+            return 0;
+        }
+        *self.mutex_need.get(&sem_id).unwrap()
+    }
+    pub fn set_sem_allocated(&mut self, sem_id: usize, value: usize) {
+        self.sem_allocation.insert(sem_id, value);
+    }
+    pub fn set_sem_need(&mut self, sem_id: usize, value: usize) {
+        self.sem_need.insert(sem_id, value);
+    }
+    pub fn get_sem_allocated(&self, sem_id: usize) -> usize {
+        if !self.sem_allocation.contains_key(&sem_id) {
+            return 0;
+        }
+
+        *self.sem_allocation.get(&sem_id).unwrap()
+    }
+    pub fn get_sem_need(&self, sem_id: usize) -> usize {
+        if !self.sem_need.contains_key(&sem_id) {
+            return 0;
+        }
+        *self.sem_need.get(&sem_id).unwrap()
     }
 }
 
@@ -75,6 +117,10 @@ impl TaskControlBlock {
                     task_cx: TaskContext::goto_trap_return(kstack_top),
                     task_status: TaskStatus::Ready,
                     exit_code: None,
+                    mutex_need: BTreeMap::new(),
+                    mutex_allocation: BTreeMap::new(),
+                    sem_need: BTreeMap::new(),
+                    sem_allocation: BTreeMap::new(),
                 })
             },
         }

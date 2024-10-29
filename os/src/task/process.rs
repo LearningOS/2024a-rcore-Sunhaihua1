@@ -9,6 +9,7 @@ use crate::fs::{File, Stdin, Stdout};
 use crate::mm::{translated_refmut, MemorySet, KERNEL_SPACE};
 use crate::sync::{Condvar, Mutex, Semaphore, UPSafeCell};
 use crate::trap::{trap_handler, TrapContext};
+use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec;
@@ -49,6 +50,9 @@ pub struct ProcessControlBlockInner {
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     /// condvar list
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+    pub mutex_available: BTreeMap<usize, usize>,
+    pub sem_available: BTreeMap<usize, usize>,
+    pub dead_lock_detect: usize,
 }
 
 impl ProcessControlBlockInner {
@@ -81,6 +85,19 @@ impl ProcessControlBlockInner {
     /// get a task with tid in this process
     pub fn get_task(&self, tid: usize) -> Arc<TaskControlBlock> {
         self.tasks[tid].as_ref().unwrap().clone()
+    }
+
+    pub fn set_sem_available(&mut self, sem_id: usize, count: usize) {
+        self.sem_available.insert(sem_id, count);
+    }
+    pub fn set_mutex_available(&mut self, mutex_id: usize, count: usize) {
+        self.mutex_available.insert(mutex_id, count);
+    }
+    pub fn get_sem_available(&self, sem_id: usize) -> usize {
+        *self.sem_available.get(&sem_id).unwrap()
+    }
+    pub fn enable_dead_lock_detect(&mut self, enable: usize) {
+        self.dead_lock_detect = enable;
     }
 }
 
@@ -119,6 +136,9 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    mutex_available: BTreeMap::new(),
+                    sem_available: BTreeMap::new(),
+                    dead_lock_detect: 0,
                 })
             },
         });
@@ -245,6 +265,9 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    mutex_available: BTreeMap::new(),
+                    sem_available: BTreeMap::new(),
+                    dead_lock_detect: 0,
                 })
             },
         });
